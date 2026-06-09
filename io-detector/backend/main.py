@@ -66,6 +66,7 @@ async def classify(req: ClassifyRequest):
     label = "IO" if io_conf >= 0.5 else "Organic"
 
     nci = score_text(cleaned)
+    
 
     return {
         "label": label,

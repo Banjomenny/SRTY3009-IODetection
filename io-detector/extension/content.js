@@ -6,6 +6,9 @@ let scanCount = 0
 let ioCount = 0
 let totalNci = 0
 
+console.log('[IO Detector] Initializing on', window.location.hostname)
+console.log('[IO Detector] Platform config:', getPlatformConfig())
+
 chrome.storage.local.get(['apiUrl'], (result) => {
     if (result.apiUrl) apiUrl = result.apiUrl + '/classify'
 })
@@ -146,6 +149,7 @@ function appendBadge(postElement, result) {
 
 function processPosts() {
     const posts = findPostElements()
+    console.log('[IO Detector] Found', posts.length, 'posts') 
     posts.forEach(processPost)
 }
 

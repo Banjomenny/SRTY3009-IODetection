@@ -10,19 +10,21 @@ function findPostElements() {
 
     // Fallback
     const fallback = Array.from(document.querySelectorAll('article, [role="article"]'))
-    return fallback.filter(looksLikePost)
+    console.log(`[IO Detector] Fallback: found ${fallback.length} articles`)
+    const validFallback = fallback.filter(looksLikePost)
+    console.log(`[IO Detector] Fallback after filter: ${validFallback.length} valid posts`)
+    return validFallback
 }
 
 function looksLikePost(element) {
-    const text = element.innerText || ''
+    // Check aria-label for content
+    const text = element.getAttribute('aria-label') || element.innerText || ''
     if (text.length < 20 || text.length > 5000) return false
 
     const tag = element.tagName.toLowerCase()
     if (['nav', 'header', 'footer', 'aside'].includes(tag)) return false
 
-    if (element.children.length < 2) return false
-
-    // Skip if already badged or nested inside a badged element
+    
     if (element.querySelector('.io-detector-badge')) return false
     if (element.closest('.io-detector-badge')) return false
 
@@ -35,8 +37,12 @@ function extractText(postElement) {
 
     for (const selector of selectors) {
         const el = postElement.querySelector(selector)
-        if (el && el.innerText && el.innerText.trim().length >= 15) {
-            return el.innerText.trim().slice(0, 1000)
+        if (el) {
+            // Try aria-label first, then innerText
+            let text = el.getAttribute('aria-label') || (el.innerText || '').trim()
+            if (text && text.length >= 15) {
+                return text.slice(0, 1000)
+            }
         }
     }
 

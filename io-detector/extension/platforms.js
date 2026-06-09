@@ -26,18 +26,14 @@ const PLATFORMS = {
         ]
     },
     'truthsocial.com': {
-        name: 'Truth Social',
-        postSelectors: [
-            '[data-testid="status"]',
-            'article',
-            '.status-wrapper'
-        ],
-        textSelectors: [
-            '.status__content',
-            '[class*="content__text"]',
-            'p'
-        ]
-    },
+    name: 'Truth Social',
+    postSelectors: [
+        'div[aria-label]'  // ← Just use aria-label divs
+    ],
+    textSelectors: [
+        'div[aria-label]'  // ← Will read from attribute in extractText()
+    ]
+},
     'reddit.com': {
         name: 'Reddit',
         postSelectors: [
