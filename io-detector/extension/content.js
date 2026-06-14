@@ -127,7 +127,7 @@ function createBadge(result) {
    if (indicators.length > 0) {
         const disclaimer = document.createElement('span')
         disclaimer.className = 'io-indicator-disclaimer'
-        disclaimer.textContent = 'Patterns detection is based on known words and phrases and may not reflect intent'
+        disclaimer.textContent = 'Pattern detection is based on known words and phrases and may not reflect intent'
         detail.appendChild(disclaimer)
     }
 
