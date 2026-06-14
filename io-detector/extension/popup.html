@@ -145,6 +145,72 @@
       min-height: 16px;
     }
 
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 4px 0;
+    }
+
+    .toggle-row + .toggle-row {
+      margin-top: 8px;
+    }
+
+    .toggle-label {
+      color: #ccc;
+      font-size: 12px;
+    }
+
+    .toggle {
+      position: relative;
+      display: inline-block;
+      width: 36px;
+      height: 20px;
+      flex-shrink: 0;
+    }
+
+    .toggle input { opacity: 0; width: 0; height: 0; }
+
+    .toggle-slider {
+      position: absolute;
+      inset: 0;
+      background: #333;
+      border-radius: 20px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .toggle-slider::before {
+      content: '';
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      left: 3px;
+      top: 3px;
+      background: #888;
+      border-radius: 50%;
+      transition: transform 0.2s, background 0.2s;
+    }
+
+    .toggle input:checked + .toggle-slider { background: #1e3a5f; }
+    .toggle input:checked + .toggle-slider::before {
+      transform: translateX(16px);
+      background: #93c5fd;
+    }
+
+    .confidence-slider {
+      width: 100%;
+      margin-top: 6px;
+      accent-color: #93c5fd;
+    }
+
+    .threshold-value {
+      font-size: 12px;
+      color: #93c5fd;
+      font-weight: bold;
+      margin-left: auto;
+    }
+
     .popup-footer {
       padding: 8px 16px;
       font-size: 10px;
@@ -177,13 +243,44 @@
       </div>
       <div class="stat-box">
         <div class="stat-value" id="statIO">—</div>
-        <div class="stat-label">IO Flagged</div>
+        <div class="stat-label">Flagged</div>
       </div>
       <div class="stat-box">
         <div class="stat-value" id="statAvg">—</div>
         <div class="stat-label">Avg NCI</div>
       </div>
     </div>
+  </div>
+
+  <div class="popup-section">
+    <div class="popup-section-label">Settings</div>
+    <div class="toggle-row">
+      <span class="toggle-label">Extension enabled</span>
+      <label class="toggle">
+        <input type="checkbox" id="toggleEnabled" checked />
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+    <div class="toggle-row">
+      <span class="toggle-label">Flagged posts only</span>
+      <label class="toggle">
+        <input type="checkbox" id="toggleIoOnly" />
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+    <div class="toggle-row">
+      <span class="toggle-label">Compact mode</span>
+      <label class="toggle">
+        <input type="checkbox" id="toggleCompact" />
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+    <div class="toggle-row" style="margin-top: 10px;">
+      <span class="toggle-label">Min IO confidence</span>
+      <span class="threshold-value" id="thresholdValue">50%</span>
+    </div>
+    <input class="confidence-slider" type="range" id="confidenceSlider"
+           min="50" max="95" step="5" value="50" />
   </div>
 
   <div class="popup-section">

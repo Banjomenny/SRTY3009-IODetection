@@ -5,6 +5,7 @@ let apiWarned = false
 let scanCount = 0
 let ioCount = 0
 let totalNci = 0
+let settings = { enabled: true, ioOnly: false, minConfidence: 50, compactMode: false }
 
 const IND_NAMES = {
     1:  'Urgency framing',
@@ -29,9 +30,33 @@ const IND_NAMES = {
     20: 'Historical parallels',
 }
 
-chrome.storage.local.get(['apiUrl'], (result) => {
+chrome.storage.local.get(['apiUrl', 'enabled', 'ioOnly', 'minConfidence', 'compactMode'], (result) => {
     if (result.apiUrl) apiUrl = result.apiUrl + '/classify'
+    settings.enabled       = result.enabled !== false
+    settings.ioOnly        = result.ioOnly === true
+    settings.minConfidence = result.minConfidence ?? 50
+    settings.compactMode   = result.compactMode === true
 })
+
+chrome.storage.onChanged.addListener((changes) => {
+    if ('enabled'       in changes) settings.enabled       = changes.enabled.newValue
+    if ('ioOnly'        in changes) settings.ioOnly        = changes.ioOnly.newValue
+    if ('minConfidence' in changes) settings.minConfidence = changes.minConfidence.newValue
+    if ('compactMode'   in changes) settings.compactMode   = changes.compactMode.newValue
+    applySettings()
+})
+
+function applySettings() {
+    document.querySelectorAll('.io-detector-badge').forEach(badge => {
+        const natural    = badge.classList.contains('natural')
+        const confidence = parseInt(badge.dataset.ioConfidence || '0', 10)
+        const belowThreshold = !natural && confidence < settings.minConfidence
+        const hidden = !settings.enabled || (settings.ioOnly && natural) || belowThreshold
+        badge.style.display = hidden ? 'none' : ''
+        badge.classList.toggle('compact', settings.compactMode)
+    })
+    if (settings.enabled) processPosts()
+}
 
 function hashText(text) {
     if (typeof text !== 'string') {
@@ -60,24 +85,110 @@ function scoreColor(label) {
     return '#16a34a'
 }
 
-function createBadge(result) {
+function showAnalysisModal(postText, result, triggerBtn) {
+    document.querySelector('.io-analysis-overlay')?.remove()
+
+    if (triggerBtn) {
+        triggerBtn.disabled = true
+        triggerBtn.textContent = '⏳ Analyzing…'
+    }
+
+    const overlay = document.createElement('div')
+    overlay.className = 'io-analysis-overlay'
+
+    const modal = document.createElement('div')
+    modal.className = 'io-analysis-modal'
+
+    const header = document.createElement('div')
+    header.className = 'io-analysis-header'
+
+    const title = document.createElement('span')
+    title.textContent = '⚠️ In-Depth Analysis'
+    header.appendChild(title)
+
+    const closeBtn = document.createElement('button')
+    closeBtn.className = 'io-analysis-close'
+    closeBtn.textContent = '✕'
+    closeBtn.addEventListener('click', () => overlay.remove())
+    header.appendChild(closeBtn)
+
+    const body = document.createElement('div')
+    body.className = 'io-analysis-body'
+
+    const loading = document.createElement('div')
+    loading.className = 'io-analysis-loading'
+    loading.textContent = 'Analyzing with Gemini…'
+    body.appendChild(loading)
+
+    modal.appendChild(header)
+    modal.appendChild(body)
+    overlay.appendChild(modal)
+    document.body.appendChild(overlay)
+
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove() })
+
+    chrome.runtime.sendMessage({
+        type: 'GEMINI_ANALYZE',
+        text: postText,
+        apiUrl,
+        io_confidence: result.io_confidence,
+        nci_score: result.nci_score,
+        tier: result.tier,
+        indicators: result.indicators
+    }, (response) => {
+        if (triggerBtn) {
+            triggerBtn.disabled = false
+            triggerBtn.textContent = '🔍 Learn More'
+        }
+        body.innerHTML = ''
+        if (response?.success && response.analysis) {
+            const textEl = document.createElement('div')
+            textEl.className = 'io-analysis-text'
+            textEl.textContent = response.analysis
+            body.appendChild(textEl)
+        } else {
+            const err = document.createElement('div')
+            err.className = 'io-analysis-error'
+            err.textContent = response?.error || 'Failed to get analysis. Make sure the backend is running and GEMINI_API_KEY is set.'
+            body.appendChild(err)
+        }
+    })
+}
+
+function createBadge(result, postText) {
     const score = result.nci_score
     const isIO = result.label === 'IO'
     const icon = isIO ? '⚠️' : '✅'
     const color = scoreColor(result.label)
-    const cls = scoreClass(score)
+    scoreClass(score)
     const topNums = (result.top_indicators || []).map(n => `#${n}`).join(' ')
 
     const badge = document.createElement('div')
-    badge.className = `io-detector-badge ${result.label.toLowerCase()}`
+    const displayLabel = isIO ? 'Flagged' : 'Natural'
+    badge.className = `io-detector-badge ${displayLabel.toLowerCase()}`
     badge.setAttribute('data-score', score)
+    badge.setAttribute('data-io-confidence', Math.round(result.io_confidence * 100))
 
     const summary = document.createElement('span')
     summary.className = 'io-badge-summary'
-    summary.textContent =   `${icon} 
-                            ${result.label} ·  ${result.label == 'IO' ? result.io_confidence * 100 + "%" : result.org_confidence * 100 + "%"} 
-                            ${topNums ? '\n' + topNums : ''}`
     summary.style.color = color
+
+    const iconLabel = document.createElement('span')
+    iconLabel.textContent = `${icon} ${displayLabel}`
+
+    const confidenceSpan = document.createElement('span')
+    confidenceSpan.className = 'io-badge-confidence'
+    confidenceSpan.textContent = ` · ${isIO ? result.io_confidence * 100 : result.org_confidence * 100}%`
+
+    summary.appendChild(iconLabel)
+    summary.appendChild(confidenceSpan)
+
+    if (topNums) {
+        const indicatorsSpan = document.createElement('span')
+        indicatorsSpan.className = 'io-badge-indicators'
+        indicatorsSpan.textContent = ` ${topNums}`
+        summary.appendChild(indicatorsSpan)
+    }
 
     const detail = document.createElement('div')
     detail.className = 'io-badge-detail'
@@ -85,7 +196,7 @@ function createBadge(result) {
 
     const header = document.createElement('div')
     header.className = 'io-detail-header'
-    header.textContent = `${result.tier} — (IO: ${result.io_confidence}, Org: ${result.org_confidence})`
+    header.textContent = `${result.tier} — (Flagged: ${result.io_confidence}, Natural: ${result.org_confidence})`
     detail.appendChild(header)
 
     const indicators = result.indicators || []
@@ -131,6 +242,18 @@ function createBadge(result) {
         detail.appendChild(disclaimer)
     }
 
+    if (isIO && postText) {
+        const learnMoreBtn = document.createElement('button')
+        learnMoreBtn.className = 'io-learn-more-btn'
+        learnMoreBtn.textContent = '🔍 Learn More'
+        learnMoreBtn.addEventListener('click', (e) => {
+            e.stopPropagation()
+            e.preventDefault()
+            showAnalysisModal(postText, result, learnMoreBtn)
+        })
+        detail.appendChild(learnMoreBtn)
+    }
+
     badge.appendChild(summary)
     badge.appendChild(detail)
 
@@ -144,6 +267,7 @@ function createBadge(result) {
 }
 
 async function processPost(postElement) {
+    if (!settings.enabled) return
     if (postElement.querySelector('.io-detector-badge')) return
 
     const text = await extractText(postElement)
@@ -154,7 +278,7 @@ async function processPost(postElement) {
     const now = Date.now()
     const cached = cache.get(key)
     if (cached && now - cached.ts < CACHE_TTL) {
-        appendBadge(postElement, cached.result)
+        appendBadge(postElement, cached.result, cached.text)
         return
     }
 
@@ -169,8 +293,8 @@ async function processPost(postElement) {
         })
 
         if (response && response.success) {
-            cache.set(key, { result: response.data, ts: now })
-            appendBadge(postElement, response.data)
+            cache.set(key, { result: response.data, ts: now, text })
+            appendBadge(postElement, response.data, text)
             scanCount++
             if (response.data.label === 'IO') ioCount++
             totalNci += response.data.nci_score
@@ -183,9 +307,16 @@ async function processPost(postElement) {
     }
 }
 
-function appendBadge(postElement, result) {
+function appendBadge(postElement, result, text) {
     if (postElement.querySelector('.io-detector-badge')) return
-    const badge = createBadge(result)
+    const badge = createBadge(result, text)
+    const natural    = result.label !== 'IO'
+    const confidence = Math.round(result.io_confidence * 100)
+    const belowThreshold = !natural && confidence < settings.minConfidence
+    if (!settings.enabled || (settings.ioOnly && natural) || belowThreshold) {
+        badge.style.display = 'none'
+    }
+    if (settings.compactMode) badge.classList.add('compact')
     postElement.appendChild(badge)
 }
 
@@ -204,7 +335,7 @@ const observer = new MutationObserver(() => {
 observer.observe(document.body, { childList: true, subtree: true })
 processPosts()
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message.type === 'GET_STATS') {
         const avg = scanCount > 0 ? Math.round(totalNci / scanCount) : 0
         sendResponse({ scanCount, ioCount, avgNci: avg })

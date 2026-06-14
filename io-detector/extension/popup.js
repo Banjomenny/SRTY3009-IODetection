@@ -3,6 +3,11 @@ const statusText = document.getElementById('statusText')
 const apiInput = document.getElementById('apiInput')
 const saveBtn = document.getElementById('saveBtn')
 const saveConfirm = document.getElementById('saveConfirm')
+const toggleEnabled    = document.getElementById('toggleEnabled')
+const toggleIoOnly     = document.getElementById('toggleIoOnly')
+const toggleCompact    = document.getElementById('toggleCompact')
+const confidenceSlider = document.getElementById('confidenceSlider')
+const thresholdValue   = document.getElementById('thresholdValue')
 
 async function checkHealth(base) {
     try {
@@ -35,10 +40,34 @@ function loadStats() {
     })
 }
 
-chrome.storage.local.get(['apiUrl'], (result) => {
+chrome.storage.local.get(['apiUrl', 'enabled', 'ioOnly', 'minConfidence', 'compactMode'], (result) => {
     const base = result.apiUrl || 'http://localhost:8000'
     apiInput.value = base
     checkHealth(base)
+    toggleEnabled.checked  = result.enabled !== false
+    toggleIoOnly.checked   = result.ioOnly === true
+    toggleCompact.checked  = result.compactMode === true
+    const thresh = result.minConfidence ?? 50
+    confidenceSlider.value = thresh
+    thresholdValue.textContent = thresh + '%'
+})
+
+toggleEnabled.addEventListener('change', () => {
+    chrome.storage.local.set({ enabled: toggleEnabled.checked })
+})
+
+toggleIoOnly.addEventListener('change', () => {
+    chrome.storage.local.set({ ioOnly: toggleIoOnly.checked })
+})
+
+toggleCompact.addEventListener('change', () => {
+    chrome.storage.local.set({ compactMode: toggleCompact.checked })
+})
+
+confidenceSlider.addEventListener('input', () => {
+    const val = parseInt(confidenceSlider.value, 10)
+    thresholdValue.textContent = val + '%'
+    chrome.storage.local.set({ minConfidence: val })
 })
 
 saveBtn.addEventListener('click', () => {
