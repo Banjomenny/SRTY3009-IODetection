@@ -10,9 +10,9 @@ function findPostElements() {
 
     // Fallback
     const fallback = Array.from(document.querySelectorAll('article, [role="article"]'))
-    console.log(`[IO Detector] Fallback: found ${fallback.length} articles`)
+    
     const validFallback = fallback.filter(looksLikePost)
-    console.log(`[IO Detector] Fallback after filter: ${validFallback.length} valid posts`)
+    
     return validFallback
 }
 
@@ -31,14 +31,21 @@ function looksLikePost(element) {
     return true
 }
 
-function extractText(postElement) {
+async function extractText(postElement) {
     const config = getPlatformConfig()
     const selectors = config ? config.textSelectors : []
+
+    // Handle truncation before any extraction attempt
+    const showMoreBtn = postElement.querySelector(
+        'button[data-testid="tweet-text-show-more-link"]'
+    )
+    if (showMoreBtn) {
+        await expandTweetText(postElement, showMoreBtn)
+    }
 
     for (const selector of selectors) {
         const el = postElement.querySelector(selector)
         if (el) {
-            // Try aria-label first, then innerText
             let text = el.getAttribute('aria-label') || (el.innerText || '').trim()
             if (text && text.length >= 15) {
                 return text.slice(0, 1000)
@@ -47,6 +54,22 @@ function extractText(postElement) {
     }
 
     return extractMainText(postElement)
+}
+
+function expandTweetText(postElement, btn) {
+    return new Promise((resolve) => {
+        const observer = new MutationObserver(() => {
+            if (!postElement.querySelector('button[data-testid="tweet-text-show-more-link"]')) {
+                observer.disconnect()
+                resolve()
+            }
+        })
+        observer.observe(postElement, { childList: true, subtree: true })
+        btn.click()
+
+        // Safety timeout — don't hang forever if DOM doesn't update
+        setTimeout(() => { observer.disconnect(); resolve() }, 3000)
+    })
 }
 
 function extractMainText(element) {
@@ -70,6 +93,6 @@ function extractMainText(element) {
     })
 
     if (filtered.length === 0) return ''
-    const longest = filtered.reduce((a, b) => (b.length > a.length ? b : a), '')
-    return longest.slice(0, 1000)
+
+    return filtered.join(' ').slice(0, 1000)
 }

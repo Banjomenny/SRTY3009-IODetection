@@ -1,10 +1,15 @@
+from datetime import datetime
+import csv
+import os
 import re
+from sys import platform
 import torch
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 from nci_scorer import score_text, get_tier
+
 
 MODEL_NAME = "Banjomenny/DisInfoBert-Defended"
 
@@ -61,19 +66,41 @@ async def classify(req: ClassifyRequest):
         outputs = model(**inputs)
         probs = torch.softmax(outputs.logits, dim=-1)[0].cpu().tolist()
 
-    org_conf = round(probs[0], 1)
-    io_conf = round(probs[1], 1)
+    org_conf = round(probs[0], 3)
+    io_conf = round(probs[1], 3)
     label = "IO" if io_conf >= 0.5 else "Organic"
 
     nci = score_text(cleaned)
-    
 
+    safe_platform = req.platform.replace('/', '').replace(' ', '_').replace('\\', '')
+    log_path = f"classification_log_{safe_platform}_{datetime.now().strftime('%Y-%m-%d')}.csv"
+
+    write_header = not os.path.exists(log_path)
+
+    with open(log_path, "a", newline='', encoding='utf-8') as f:
+        writer = csv.writer(f)
+
+        if write_header:
+            writer.writerow(['text', 'label', 'io_confidence', 'org_confidence', 
+                            'nci_score', 'top_indicators', 'platform', 'timestamp'])
+
+        writer.writerow([
+            cleaned,
+            label,
+            io_conf,
+            org_conf,
+            nci["nci_score"],
+            ','.join(str(n) for n in nci["top_indicators"]),
+            req.platform,
+            datetime.now().isoformat()
+        ])
+    
     return {
         "label": label,
         "io_confidence": io_conf,
         "org_confidence": org_conf,
         "nci_score": nci["nci_score"],
-        "tier": get_tier(nci["nci_score"]),
+        "tier": get_tier(io_conf, label) if label == "IO" else get_tier(org_conf, label),
         "indicators": nci["indicators"],
         "top_indicators": nci["top_indicators"],
         "platform": req.platform,

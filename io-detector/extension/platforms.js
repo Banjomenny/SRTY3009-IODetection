@@ -1,37 +1,21 @@
 const PLATFORMS = {
     'x.com': {
-        name: 'X / Twitter',
-        postSelectors: [
-            '[data-testid="tweet"]',
-            '[data-testid="tweetDetail"]',
-            'article'
-        ],
-        textSelectors: [
-            '[data-testid="tweetText"]',
-            '[lang]',
-            'div[dir="auto"]'
-        ]
-    },
-    'twitter.com': {
-        name: 'X / Twitter',
-        postSelectors: [
-            '[data-testid="tweet"]',
-            '[data-testid="tweetDetail"]',
-            'article'
-        ],
-        textSelectors: [
-            '[data-testid="tweetText"]',
-            '[lang]',
-            'div[dir="auto"]'
-        ]
-    },
+    name: 'X / Twitter',
+    postSelectors: [
+        '[data-testid="tweet"]',
+        'article'
+    ],
+    textSelectors: [
+        'span'
+    ]
+},
     'truthsocial.com': {
     name: 'Truth Social',
     postSelectors: [
-        'div[aria-label]'  // ← Just use aria-label divs
+        'div[aria-label]'
     ],
     textSelectors: [
-        'div[aria-label]'  // ← Will read from attribute in extractText()
+        'div[aria-label]'
     ]
 },
     'reddit.com': {
