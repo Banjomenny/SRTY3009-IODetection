@@ -19,7 +19,7 @@ function findPostElements() {
 function looksLikePost(element) {
     // Check aria-label for content
     const text = element.getAttribute('aria-label') || element.innerText || ''
-    if (text.length < 20 || text.length > 5000) return false
+    if (text.length < 20 || text.length > 15000) return false
 
     const tag = element.tagName.toLowerCase()
     if (['nav', 'header', 'footer', 'aside'].includes(tag)) return false
@@ -70,6 +70,23 @@ function expandTweetText(postElement, btn) {
         // Safety timeout — don't hang forever if DOM doesn't update
         setTimeout(() => { observer.disconnect(); resolve() }, 3000)
     })
+}
+
+function extractArticleText() {
+    const article = document.querySelector('main article, article')
+    if (!article) return null
+
+    const h1 = document.querySelector('h1')
+    const headline = h1?.textContent.trim() || ''
+
+    const paragraphs = [...article.querySelectorAll('p')]
+        .map(p => p.textContent.trim())
+        .filter(t => t.length > 30)
+
+    const body = paragraphs.join(' ')
+    if (body.length < 100) return null
+
+    return ((headline ? headline + '. ' : '') + body).slice(0, 3000)
 }
 
 function extractMainText(element) {

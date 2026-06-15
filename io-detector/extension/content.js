@@ -320,10 +320,71 @@ function appendBadge(postElement, result, text) {
     postElement.appendChild(badge)
 }
 
+async function processArticle() {
+    const article = document.querySelector('main article, article')
+    if (!article) return
+    if (article.querySelector('.io-detector-badge')) return
+
+    const text = extractArticleText()
+    if (!text || text.length < 100) return
+
+    const key = hashText(text)
+    if (!key) return
+    const now = Date.now()
+    const cached = cache.get(key)
+    if (cached && now - cached.ts < CACHE_TTL) {
+        prependArticleBadge(article, cached.result, cached.text)
+        return
+    }
+
+    const platform = window.location.hostname
+
+    try {
+        const response = await new Promise((resolve) => {
+            chrome.runtime.sendMessage(
+                { type: 'CLASSIFY', text, platform, apiUrl },
+                resolve
+            )
+        })
+
+        if (response?.success) {
+            cache.set(key, { result: response.data, ts: now, text })
+            prependArticleBadge(article, response.data, text)
+            scanCount++
+            if (response.data.label === 'IO') ioCount++
+            totalNci += response.data.nci_score
+        }
+    } catch {
+        if (!apiWarned) {
+            console.warn('[IO Detector] Backend unreachable — badges disabled')
+            apiWarned = true
+        }
+    }
+}
+
+function prependArticleBadge(articleElement, result, text) {
+    if (articleElement.querySelector('.io-detector-badge')) return
+    const badge = createBadge(result, text)
+    badge.classList.add('io-article-badge')
+    const natural    = result.label !== 'IO'
+    const confidence = Math.round(result.io_confidence * 100)
+    const belowThreshold = !natural && confidence < settings.minConfidence
+    if (!settings.enabled || (settings.ioOnly && natural) || belowThreshold) {
+        badge.style.display = 'none'
+    }
+    if (settings.compactMode) badge.classList.add('compact')
+    articleElement.insertAdjacentElement('afterbegin', badge)
+}
+
 function processPosts() {
-    const posts = findPostElements()
-    console.log('[IO Detector] Found', posts.length, 'posts') 
-    posts.forEach(processPost)
+    const config = getPlatformConfig()
+    if (config) {
+        const posts = findPostElements()
+        console.log('[IO Detector] Found', posts.length, 'posts')
+        posts.forEach(processPost)
+    } else if (document.querySelector('article')) {
+        processArticle()
+    }
 }
 
 let debounceTimer = null
