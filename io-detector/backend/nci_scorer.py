@@ -52,7 +52,8 @@ NCI_INDICATORS = {
 }
 
 EMOTIONAL_WORDS = set(
-    NCI_INDICATORS[2][1] + NCI_INDICATORS[6][1] + NCI_INDICATORS[8][1]
+    w for w in (NCI_INDICATORS[2][1] + NCI_INDICATORS[6][1] + NCI_INDICATORS[8][1])
+    if ' ' not in w
 )
 
 def score_text(text: str) -> dict:
@@ -99,7 +100,5 @@ def get_tier(io_confidence: float, label: str) -> str:
         return f'High likelihood of {label}'
     elif io_confidence >= 0.75:
         return f'Moderate likelihood of {label}'
-    elif io_confidence >= 0.5:
-        return f'Low likelihood of {label}'
     else:
         return f'Low likelihood of {label}'

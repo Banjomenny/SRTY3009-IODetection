@@ -1,11 +1,12 @@
 const cache = new Map()
 const CACHE_TTL = 5 * 60 * 1000
+const FAIL_TTL = 30 * 1000
 let apiUrl = 'http://localhost:8000/classify'
 let apiWarned = false
 let scanCount = 0
 let ioCount = 0
 let totalNci = 0
-let settings = { enabled: true, ioOnly: false, minConfidence: 50, compactMode: false }
+let settings = { enabled: true, ioOnly: false, minConfidence: 50, compactMode: false, profanityFilter: false }
 
 const IND_NAMES = {
     1:  'Urgency framing',
@@ -30,19 +31,23 @@ const IND_NAMES = {
     20: 'Historical parallels',
 }
 
-chrome.storage.local.get(['apiUrl', 'enabled', 'ioOnly', 'minConfidence', 'compactMode'], (result) => {
+chrome.storage.local.get(['apiUrl', 'enabled', 'ioOnly', 'minConfidence', 'compactMode', 'profanityFilter'], (result) => {
     if (result.apiUrl) apiUrl = result.apiUrl + '/classify'
-    settings.enabled       = result.enabled !== false
-    settings.ioOnly        = result.ioOnly === true
-    settings.minConfidence = result.minConfidence ?? 50
-    settings.compactMode   = result.compactMode === true
+    settings.enabled        = result.enabled !== false
+    settings.ioOnly         = result.ioOnly === true
+    settings.minConfidence  = result.minConfidence ?? 50
+    settings.compactMode    = result.compactMode === true
+    settings.profanityFilter = result.profanityFilter === true
+    observer.observe(document.body, { childList: true, subtree: true })
+    processPosts()
 })
 
 chrome.storage.onChanged.addListener((changes) => {
-    if ('enabled'       in changes) settings.enabled       = changes.enabled.newValue
-    if ('ioOnly'        in changes) settings.ioOnly        = changes.ioOnly.newValue
-    if ('minConfidence' in changes) settings.minConfidence = changes.minConfidence.newValue
-    if ('compactMode'   in changes) settings.compactMode   = changes.compactMode.newValue
+    if ('enabled'        in changes) settings.enabled        = changes.enabled.newValue
+    if ('ioOnly'         in changes) settings.ioOnly         = changes.ioOnly.newValue
+    if ('minConfidence'  in changes) settings.minConfidence  = changes.minConfidence.newValue
+    if ('compactMode'    in changes) settings.compactMode    = changes.compactMode.newValue
+    if ('profanityFilter' in changes) settings.profanityFilter = changes.profanityFilter.newValue
     applySettings()
 })
 
@@ -155,12 +160,30 @@ function showAnalysisModal(postText, result, triggerBtn) {
     })
 }
 
+const PROFANITY_PATTERN = typeof PROFANITY_LIST !== 'undefined' && PROFANITY_LIST.length > 0
+    ? new RegExp(`(?<!\\w)(${PROFANITY_LIST.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})(?!\\w)`, 'gi')
+    : null
+
+function censorPost(postElement) {
+    if (!settings.profanityFilter || !PROFANITY_PATTERN) return
+    const walker = document.createTreeWalker(postElement, NodeFilter.SHOW_TEXT, {
+        acceptNode(node) {
+            if (node.parentElement?.closest('.io-detector-badge')) return NodeFilter.FILTER_REJECT
+            return NodeFilter.FILTER_ACCEPT
+        }
+    })
+    let node
+    while ((node = walker.nextNode())) {
+        const censored = node.nodeValue.replace(PROFANITY_PATTERN, m => '*'.repeat(m.length))
+        if (censored !== node.nodeValue) node.nodeValue = censored
+    }
+}
+
 function createBadge(result, postText) {
     const score = result.nci_score
     const isIO = result.label === 'IO'
     const icon = isIO ? '⚠️' : '✅'
     const color = scoreColor(result.label)
-    scoreClass(score)
     const topNums = (result.top_indicators || []).map(n => `#${n}`).join(' ')
 
     const badge = document.createElement('div')
@@ -175,6 +198,7 @@ function createBadge(result, postText) {
 
     const iconLabel = document.createElement('span')
     iconLabel.textContent = `${icon} ${displayLabel}`
+
 
     const confidenceSpan = document.createElement('span')
     confidenceSpan.className = 'io-badge-confidence'
@@ -277,9 +301,12 @@ async function processPost(postElement) {
     if (!key) return
     const now = Date.now()
     const cached = cache.get(key)
-    if (cached && now - cached.ts < CACHE_TTL) {
-        appendBadge(postElement, cached.result, cached.text)
-        return
+    if (cached) {
+        if (cached._failed && now - cached.ts < FAIL_TTL) return
+        if (!cached._failed && now - cached.ts < CACHE_TTL) {
+            appendBadge(postElement, cached.result, cached.text)
+            return
+        }
     }
 
     const platform = getPlatformConfig()?.name || window.location.hostname
@@ -293,6 +320,7 @@ async function processPost(postElement) {
         })
 
         if (response && response.success) {
+            apiWarned = false
             cache.set(key, { result: response.data, ts: now, text })
             appendBadge(postElement, response.data, text)
             scanCount++
@@ -300,6 +328,7 @@ async function processPost(postElement) {
             totalNci += response.data.nci_score
         }
     } catch {
+        cache.set(key, { _failed: true, ts: now })
         if (!apiWarned) {
             console.warn('[IO Detector] Backend unreachable — badges disabled')
             apiWarned = true
@@ -317,6 +346,7 @@ function appendBadge(postElement, result, text) {
         badge.style.display = 'none'
     }
     if (settings.compactMode) badge.classList.add('compact')
+    censorPost(postElement)
     postElement.appendChild(badge)
 }
 
@@ -332,9 +362,12 @@ async function processArticle() {
     if (!key) return
     const now = Date.now()
     const cached = cache.get(key)
-    if (cached && now - cached.ts < CACHE_TTL) {
-        prependArticleBadge(article, cached.result, cached.text)
-        return
+    if (cached) {
+        if (cached._failed && now - cached.ts < FAIL_TTL) return
+        if (!cached._failed && now - cached.ts < CACHE_TTL) {
+            prependArticleBadge(article, cached.result, cached.text)
+            return
+        }
     }
 
     const platform = window.location.hostname
@@ -348,6 +381,7 @@ async function processArticle() {
         })
 
         if (response?.success) {
+            apiWarned = false
             cache.set(key, { result: response.data, ts: now, text })
             prependArticleBadge(article, response.data, text)
             scanCount++
@@ -355,6 +389,7 @@ async function processArticle() {
             totalNci += response.data.nci_score
         }
     } catch {
+        cache.set(key, { _failed: true, ts: now })
         if (!apiWarned) {
             console.warn('[IO Detector] Backend unreachable — badges disabled')
             apiWarned = true
@@ -373,6 +408,7 @@ function prependArticleBadge(articleElement, result, text) {
         badge.style.display = 'none'
     }
     if (settings.compactMode) badge.classList.add('compact')
+    censorPost(articleElement)
     articleElement.insertAdjacentElement('afterbegin', badge)
 }
 
@@ -392,9 +428,6 @@ const observer = new MutationObserver(() => {
     clearTimeout(debounceTimer)
     debounceTimer = setTimeout(processPosts, 600)
 })
-
-observer.observe(document.body, { childList: true, subtree: true })
-processPosts()
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message.type === 'GET_STATS') {

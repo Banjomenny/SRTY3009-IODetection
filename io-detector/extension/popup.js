@@ -6,6 +6,7 @@ const saveConfirm = document.getElementById('saveConfirm')
 const toggleEnabled    = document.getElementById('toggleEnabled')
 const toggleIoOnly     = document.getElementById('toggleIoOnly')
 const toggleCompact    = document.getElementById('toggleCompact')
+const toggleProfanity  = document.getElementById('toggleProfanity')
 const confidenceSlider = document.getElementById('confidenceSlider')
 const thresholdValue   = document.getElementById('thresholdValue')
 
@@ -40,13 +41,14 @@ function loadStats() {
     })
 }
 
-chrome.storage.local.get(['apiUrl', 'enabled', 'ioOnly', 'minConfidence', 'compactMode'], (result) => {
+chrome.storage.local.get(['apiUrl', 'enabled', 'ioOnly', 'minConfidence', 'compactMode', 'profanityFilter'], (result) => {
     const base = result.apiUrl || 'http://localhost:8000'
     apiInput.value = base
     checkHealth(base)
-    toggleEnabled.checked  = result.enabled !== false
-    toggleIoOnly.checked   = result.ioOnly === true
-    toggleCompact.checked  = result.compactMode === true
+    toggleEnabled.checked   = result.enabled !== false
+    toggleIoOnly.checked    = result.ioOnly === true
+    toggleCompact.checked   = result.compactMode === true
+    toggleProfanity.checked = result.profanityFilter === true
     const thresh = result.minConfidence ?? 50
     confidenceSlider.value = thresh
     thresholdValue.textContent = thresh + '%'
@@ -62,6 +64,10 @@ toggleIoOnly.addEventListener('change', () => {
 
 toggleCompact.addEventListener('change', () => {
     chrome.storage.local.set({ compactMode: toggleCompact.checked })
+})
+
+toggleProfanity.addEventListener('change', () => {
+    chrome.storage.local.set({ profanityFilter: toggleProfanity.checked })
 })
 
 confidenceSlider.addEventListener('input', () => {

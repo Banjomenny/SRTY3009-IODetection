@@ -25,7 +25,7 @@
         "https://www.linkedin.com/*",
         "https://*/*"
       ],
-      "js": ["platforms.js", "extractor.js", "content.js"],
+      "js": ["platforms.js", "extractor.js", "profanity.js", "content.js"],
       "css": ["styles.css"],
       "run_at": "document_idle"
     }

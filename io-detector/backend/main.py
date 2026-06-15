@@ -1,8 +1,8 @@
+from contextlib import asynccontextmanager
 from datetime import datetime
 import csv
 import os
 import re
-from sys import platform
 import torch
 from google import genai
 from fastapi import FastAPI
@@ -25,23 +25,14 @@ INDICATOR_NAMES = {
     20: 'Historical parallels',
 }
 
-app = FastAPI(title="IO Detector API")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["GET", "POST"],
-    allow_headers=["*"],
-)
-
 tokenizer = None
 model = None
 device = None
 gemini_client = None
 
 
-@app.on_event("startup")
-async def load_model():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     global tokenizer, model, device, gemini_client
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"[IO Detector] Loading {MODEL_NAME} on {device}")
@@ -54,6 +45,17 @@ async def load_model():
         print("[IO Detector] Gemini client ready")
     else:
         print("[IO Detector] No GEMINI_API_KEY set — /analyze endpoint disabled")
+    yield
+
+
+app = FastAPI(title="IO Detector API", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["*"],
+)
 
 
 class ClassifyRequest(BaseModel):
@@ -90,7 +92,7 @@ async def classify(req: ClassifyRequest):
 
     nci = score_text(cleaned)
 
-    safe_platform = req.platform.replace('/', '').replace(' ', '_').replace('\\', '')
+    safe_platform = re.sub(r'[^\w]', '_', req.platform)
     log_path = f"classification_log_{safe_platform}_{datetime.now().strftime('%Y-%m-%d')}.csv"
 
     write_header = not os.path.exists(log_path)
