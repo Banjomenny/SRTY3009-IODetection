@@ -2,6 +2,7 @@
 .venv/
 __pycache__/
 *.pyc
+*/.env
 
 # Large model weights (download separately or use Git LFS)
 finetuned-roberta-improved/
