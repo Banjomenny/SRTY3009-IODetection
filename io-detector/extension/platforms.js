@@ -30,6 +30,16 @@ const PLATFORMS = {
             '.RichTextJSON-root',
             'p'
         ]
+    },
+    'facebook.com': {
+        name: 'Facebook',
+        postSelectors: ['[role="article"]'],
+        textSelectors: ['[data-ad-preview="message"]', '[data-testid="post_message"]']
+    },
+    'linkedin.com': {
+        name: 'LinkedIn',
+        postSelectors: ['[data-urn^="urn:li:activity"]', '.feed-shared-update-v2'],
+        textSelectors: ['.feed-shared-text__text-view', '.feed-shared-text', '.update-components-text']
     }
 }
 
